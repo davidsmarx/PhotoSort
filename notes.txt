@@ -1,0 +1,8 @@
+1. open anaconda prompt
+2. cd C:\Users\dsmar\Documents\Python Scripts\PhotoSort
+3. > start emacs
+emacs starts but working dir is emacs/bin. Need to figure out how to make working dir
+4. in emacs, load test_script.py
+5. M-x shell
+command line inherits path from the Anaconda shell, so python, etc works
+If you open emacs directly, not through from the anaconda shell, the command line does not have python in the path.

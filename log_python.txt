@@ -1,0 +1,34 @@
+Microsoft Windows [Version 10.0.17134.285]
+(c) 2018 Microsoft Corporation. All rights reserved.
+
+(base) c:\Program Files\emacs-25.3_1-x86_64\bin>cd "c:/Users/dsmar/Documents/Python Scripts/"PhotoSort/
+cd "c:/Users/dsmar/Documents/Python Scripts/"PhotoSort/
+
+(base) c:\Users\dsmar\Documents\Python Scripts\PhotoSort>python -i
+python -i
+Python 3.6.2 |Anaconda custom (64-bit)| (default, Sep 19 2017, 08:03:39) [MSC v.1900 64 bit (AMD64)] on win32
+Type "help", "copyright", "credits" or "license" for more information.
+>>> alias
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+NameError: name 'alias' is not defined
+>>> import sys, os
+import numpy as np
+import argparse
+import cv2
+
+>>> >>> >>> >>> >>> 
+>>> image_fn = 'IMG_2707.JPG'
+>>> image = cv2.imread(image_fn)
+>>> image.size()
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+TypeError: 'int' object is not callable
+>>> image.shape
+(3456, 5184, 3)
+>>> nr, nc, nrgb = image.shape
+>>> image_r = cv2.resize(image, (nc//2, nr//2)) # nx x ny
+>>> cv2.namedWindow("image")
+>>> cv2.imshow("image", image)
+>>> key = cv2.waitKey(1) & 0xFF
+>>> 
