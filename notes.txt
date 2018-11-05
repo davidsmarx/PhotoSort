@@ -1,3 +1,5 @@
+For HP laptop:
+
 1. open anaconda prompt
 2. cd C:\Users\dsmar\Documents\Python Scripts\PhotoSort
 3. > start emacs
