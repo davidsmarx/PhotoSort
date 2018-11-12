@@ -9,7 +9,11 @@ import numpy as np
 import argparse
 import cv2  # OpenCV
 from win32api import GetSystemMetrics
+from win32gui import BringWindowToTop
+
 # GetSystemMetrics, see https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsystemmetrics
+import tkinter
+from tkinter import filedialog
 
 import pdb
 
@@ -50,43 +54,94 @@ def click_and_crop(event, x, y, flags, clone_r):
                 cv2.rectangle(image_r, refPt, endPt, (0, 255, 0), 2)
                 #cv2.imshow("image", image_r)
 
-def ResizeToScreen(nnim, nscr):
-        rsize = 0.9*min([float(nscr[1])/float(nnim[1]), float(nscr[0])/float(nnim[0])])
-        return (int(rsize*nnim[0]), int(rsize*nnim[1])) # fx, fy
+def ResizeToScreen(image):
+        # screen resolution
+        screenx = GetSystemMetrics(0)
+        screeny = GetSystemMetrics(1)
 
+        # image size
+        nr, nc, n3 = image.shape # e.g. (nr, nc, 3)
+
+        #print('image size = (x,y,c)', nnim[1],nnim[0],nnim[2])
+        print('image size = (nr, nc, n3) ', nr, nc, n3)
+        print('screen size = (x,y)', screenx, screeny)
+
+        if np.all( np.array([nr, nc]) <= np.array([screeny, screenx]) ):
+                # no need to resize
+                image_r = image.copy()
+
+        else:
+                rsize = 0.9*min([float(screenx)/float(nc), float(screeny)/float(nr)])
+                nr_r, nc_r = int(rsize*nr), int(rsize*nc) # fx, fy
+                print('new image size, (nr, nc) ', nr_r, nc_r)
+                
+                # Dell laptop is 2048 x 1152
+                image_r = cv2.resize(image, (nc_r, nr_r)) # nx x ny
+
+        return image_r
+
+def  LoadImage(source_pn, source_fn):
+        # load the image, clone it, and setup the mouse callback function
+        #image = cv2.imread(args["image"])
+        image = cv2.imread(os.path.join(source_pn, source_fn))
+
+        image_r = ResizeToScreen(image)
+        
+        return image, image_r
+
+############################ Start sript ######################
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--image", required=True, help="Path to the image")
-args = vars(ap.parse_args())
- 
-# load the image, clone it, and setup the mouse callback function
-image = cv2.imread(args["image"])
+ap.add_argument("-i", "--image", required=False, help="Path to the image")
+ap.add_argument("--sourcepath", help="Path to source images")
+ap.add_argument("--savepath", help="Path to save images")
 
-# image size
-nnim = image.shape # e.g. (nr, nc, 3)
-# screen resolution
-screenx = GetSystemMetrics(0)
-screeny = GetSystemMetrics(1)
+args = vars(ap.parse_args()) # args is a dict
 
-print('image size = (x,y,c)', nnim[1],nnim[0],nnim[2])
-print('screen size = (x,y)', screenx, screeny)
+# prepare dialogs
+# root = tkinter.Tk()
+# root.withdraw()
 
-# rsize = 0.9*min([float(screenx)/float(nnim[1]), float(screeny)/float(nnim[0])])
-# nnimre = (int(rsize*nnim[1]), int(rsize*nnim[0])) # fx, fy
-nnimre = ResizeToScreen((nnim[1],nnim[0]), (screenx,screeny)) # fx, fy
+# if sourc path is not specified, use dialog box
+if args['sourcepath'] is None:
+        root = tkinter.Tk()
+        root.withdraw()
+        
+        file_select = filedialog.askopenfilename()
+        source_pn, source_fn = os.path.split(file_select)
 
-# Dell laptop is 2048 x 1152
+else:
+        source_pn = args['sourcepath']
+        source_fn = None
+        
+        pass
 
-image_r = cv2.resize(image, nnimre) # nx x ny
+listIm_fn = [f for f in os.listdir(source_pn) if os.path.isfile(os.path.join(source_pn, f)) and os.path.splitext(f)[1].lower() == '.jpg']
 
-clone_r = image_r.copy()
+if not source_fn is None:
+        if not source_fn in listIm_fn:
+                sys.exit('error: ' + source_fn + ' not in ' + source_pn)
+                pass
+        pass
+
+else:
+        source_fn = listIm_fn[0]
+
+        pass
+
+
 
 cv2.namedWindow("image",cv2.WINDOW_AUTOSIZE)
+#hWndImage = cv2.cvGetWindowHandle("image")
+
 # WINDOW_NORMAL scales
 # WINDOW_AUTOSIZE (default) displays in original image resolution, even if bigger than screen
 
+image, image_r = LoadImage(source_pn, source_fn)
+clone_r = image_r.copy()
 cv2.setMouseCallback("image", click_and_crop, clone_r)
+cv2.setWindowTitle("image",source_fn)
 
 # keep looping until the 'q' key is pressed
 while True:
@@ -94,38 +149,89 @@ while True:
 	cv2.imshow("image", image_r)
 	key = cv2.waitKey(1) & 0xFF # wait 1ms and process events
  
-	# if the 'r' key is pressed, reset the cropping region
+	# # if the 'r' key is pressed, reset the cropping region
+	# if key == ord("r"):
+	# 	image_r = clone_r.copy()
+
+	# if the 'r' key is pressed, rotate the image
 	if key == ord("r"):
-		image_r = clone_r.copy()
- 
+                
+                
+                nr, nc, n3 = image.shape
+                # M = cv2.getRotationMatrix2D((nr/2,nc/2),90,1)
+                # image = cv2.warpAffine(image, M, (nr, nc)) # , , size of destination image
+                image = np.rot90(image)
+                image_r = ResizeToScreen(image)
+                
+                print('rotate image: ', nr, nc, ' to ', image.shape, ' resize to ', image_r.shape)
+                
+                # nr, nc, n3 = image_r.shape
+                # M = cv2.getRotationMatrix2D((nc/2,nr/2),90,1)
+                # image_r = cv2.warpAffine(image_r, M, (nr, nc))
+
+                # print('rotate image_r: ', nr, nc, ' to ', image_r.shape)
+                
+                clone_r = image_r.copy()
+                cv2.setMouseCallback("image", click_and_crop, clone_r)
+
+                # bring image window to top
+                #BringWindowToTop(hWndImage)
+                
 	# if the 'c' key is pressed, crop
 	elif key == ord("c"):
                 # if there are two reference points, then crop the region of interest
                 # from teh image and display it
                 if refPt and endPt:
                         # crop the original image
-                        refx = int( float(nnim[1])*float(refPt[0])/float(nnimre[0]) )
-                        refy = int( float(nnim[0])*float(refPt[1])/float(nnimre[1]) )
-                        endx = int( float(nnim[1])*float(endPt[0])/float(nnimre[0]) )
-                        endy = int( float(nnim[0])*float(endPt[1])/float(nnimre[1]) )
+                        nr, nc, n3 = image.shape
+                        nrr, ncr, n3r = image_r.shape
+                        refx = int( float(nc)*float(refPt[0])/float(ncr) )
+                        refy = int( float(nr)*float(refPt[1])/float(nrr) )
+                        endx = int( float(nc)*float(endPt[0])/float(ncr) )
+                        endy = int( float(nr)*float(endPt[1])/float(nrr) )
                         roi = image[refy:endy, refx:endx]
 
-                        if np.any( np.array(roi.shape) > np.array([screeny, screenx, 3]) ):
-                                #if roi > screen size
-                                #roi = clone_r[refPt[1]:endPt[1], refPt[0]:endPt[0]]
-                                nroi = roi.shape
-                                nroire = ResizeToScreen((nroi[1],nroi[0]), (screenx,screeny)) # fx, fy
-                                roi_display = cv2.resize(roi, nroire)
-                        else:
-                                roi_display = roi
+                        roi_display = ResizeToScreen(roi)
+                        
+                        # if np.any( np.array(roi.shape) > np.array([screeny, screenx, 3]) ):
+                        #         #if roi > screen size
+                        #         #roi = clone_r[refPt[1]:endPt[1], refPt[0]:endPt[0]]
+                        #         nroi = roi.shape
+                        #         nroire = ResizeToScreen((nroi[1],nroi[0]), (screenx,screeny)) # fx, fy
+                        #         roi_display = cv2.resize(roi, nroire)
+                        # else:
+                        #         roi_display = roi
 
                         cv2.imshow("ROI", roi_display)
+                        #hWndROI = cv2.cvGetWindowHandle("ROI")
+                        #BringWindowToTop(hWndROI)
+
+                        pass
+                pass
 
         # quit
 	elif key == ord("q"):
                 break
 
+	elif key == ord("s"):
+                save_bn, save_ext = os.path.splitext(source_fn)
+                save_fn = save_bn + '_crop' + save_ext
+                save_pn = source_pn + os.path.sep + 'cropped'
+                if not os.path.isdir(save_pn):
+                        os.makedirs(save_pn)
+
+                print('writing ', save_pn + os.path.sep + save_fn)
+                cv2.imwrite(save_pn + os.path.sep + save_fn, roi)
+
+	elif key == ord("n"):
+                listIm_fn.remove(source_fn)
+                source_fn = listIm_fn[0]
+                image, image_r = LoadImage(source_pn, source_fn)
+                clone_r = image_r.copy()
+                cv2.setMouseCallback("image", click_and_crop, clone_r)
+                #BringWindowToTop(hWndImage)
+                cv2.setWindowTitle("image",source_fn)
+
 # close all open windows
 cv2.destroyAllWindows()
 
-                
