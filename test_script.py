@@ -24,10 +24,12 @@ refPt = ()
 endPt = ()
 cropping = False
 image_r = None
+image = None
+roi = None
 
 def click_and_crop(event, x, y, flags, clone_r):
         # grab references to the global variables
-        global refPt, endPt, cropping, image_r
+        global refPt, endPt, cropping, image_r, image, roi
         
         # if the left mouse button was clicked, record the starting
         # (x, y) coordinates and indicate that cropping is being
@@ -54,6 +56,22 @@ def click_and_crop(event, x, y, flags, clone_r):
                 cv2.rectangle(image_r, refPt, endPt, (0, 255, 0), 2)
                 #cv2.imshow("image", image_r)
 
+                # display the selected roi in the ROI window
+                # crop the original image
+                nr, nc, n3 = image.shape
+                nrr, ncr, n3r = image_r.shape
+                refx = int( float(nc)*float(refPt[0])/float(ncr) )
+                refy = int( float(nr)*float(refPt[1])/float(nrr) )
+                endx = int( float(nc)*float(endPt[0])/float(ncr) )
+                endy = int( float(nr)*float(endPt[1])/float(nrr) )
+                roi = image[refy:endy, refx:endx]
+
+                roi_display = ResizeToScreen(roi)
+                        
+                cv2.imshow("ROI", roi_display)
+                #hWndROI = cv2.cvGetWindowHandle("ROI")
+                #BringWindowToTop(hWndROI)
+
 def ResizeToScreen(image):
         # screen resolution
         screenx = GetSystemMetrics(0)
@@ -63,8 +81,8 @@ def ResizeToScreen(image):
         nr, nc, n3 = image.shape # e.g. (nr, nc, 3)
 
         #print('image size = (x,y,c)', nnim[1],nnim[0],nnim[2])
-        print('image size = (nr, nc, n3) ', nr, nc, n3)
-        print('screen size = (x,y)', screenx, screeny)
+        #print('image size = (nr, nc, n3) ', nr, nc, n3)
+        #print('screen size = (x,y)', screenx, screeny)
 
         if np.all( np.array([nr, nc]) <= np.array([screeny, screenx]) ):
                 # no need to resize
@@ -73,9 +91,10 @@ def ResizeToScreen(image):
         else:
                 rsize = 0.9*min([float(screenx)/float(nc), float(screeny)/float(nr)])
                 nr_r, nc_r = int(rsize*nr), int(rsize*nc) # fx, fy
-                print('new image size, (nr, nc) ', nr_r, nc_r)
+                #print('new image size, (nr, nc) ', nr_r, nc_r)
                 
                 # Dell laptop is 2048 x 1152
+                # home HP is 1366 x 768
                 image_r = cv2.resize(image, (nc_r, nr_r)) # nx x ny
 
         return image_r
@@ -118,6 +137,7 @@ else:
         pass
 
 listIm_fn = [f for f in os.listdir(source_pn) if os.path.isfile(os.path.join(source_pn, f)) and os.path.splitext(f)[1].lower() == '.jpg']
+listImBack_fn = list() # for returning to previous images
 
 if not source_fn is None:
         if not source_fn in listIm_fn:
@@ -193,15 +213,6 @@ while True:
 
                         roi_display = ResizeToScreen(roi)
                         
-                        # if np.any( np.array(roi.shape) > np.array([screeny, screenx, 3]) ):
-                        #         #if roi > screen size
-                        #         #roi = clone_r[refPt[1]:endPt[1], refPt[0]:endPt[0]]
-                        #         nroi = roi.shape
-                        #         nroire = ResizeToScreen((nroi[1],nroi[0]), (screenx,screeny)) # fx, fy
-                        #         roi_display = cv2.resize(roi, nroire)
-                        # else:
-                        #         roi_display = roi
-
                         cv2.imshow("ROI", roi_display)
                         #hWndROI = cv2.cvGetWindowHandle("ROI")
                         #BringWindowToTop(hWndROI)
@@ -221,17 +232,53 @@ while True:
                         os.makedirs(save_pn)
 
                 print('writing ', save_pn + os.path.sep + save_fn)
-                cv2.imwrite(save_pn + os.path.sep + save_fn, roi)
+                if roi is None:
+                        cv2.imwrite(save_pn + os.path.sep + save_fn, image)
+                else:
+                        cv2.imwrite(save_pn + os.path.sep + save_fn, roi)
 
 	elif key == ord("n"):
+                # find current position in the list
+                i_current = listIm_fn.index(source_fn)
                 listIm_fn.remove(source_fn)
-                source_fn = listIm_fn[0]
+                listImBack_fn.append(source_fn)
+
+                if i_current > len(listIm_fn)+1:
+                        source_fn = listIm_fn[0]
+                else:
+                        source_fn = listIm_fn[i_current]
+                        
                 image, image_r = LoadImage(source_pn, source_fn)
                 clone_r = image_r.copy()
                 cv2.setMouseCallback("image", click_and_crop, clone_r)
                 #BringWindowToTop(hWndImage)
                 cv2.setWindowTitle("image",source_fn)
 
+                # set roi = None because new image
+                roi = None
+
+                pass
+
+	elif key == ord("b"):
+                # return to previous image
+                # current source_fn is in listIm_fn
+                if len(listImBack_fn) == 0:
+                        continue
+                
+                source_fn = listImBack_fn[-1]
+                listImBack_fn.remove(source_fn)
+                listIm_fn.insert(i_current,source_fn)
+
+                image, image_r = LoadImage(source_pn, source_fn)
+                clone_r = image_r.copy()
+                cv2.setMouseCallback("image", click_and_crop, clone_r)
+                #BringWindowToTop(hWndImage)
+                cv2.setWindowTitle("image",source_fn)
+
+                # set roi = None because new image
+                roi = None
+                
+                
 # close all open windows
 cv2.destroyAllWindows()
 
