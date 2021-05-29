@@ -3,13 +3,16 @@
 
 # command line example:
 # > python -i test_script.py --image family.jpg
+# > python test_script.py --sourcepath "<source path>" --savepath "<save path>"
 
 import sys, os
 import numpy as np
 import argparse
+import glob
 import cv2  # OpenCV
 from win32api import GetSystemMetrics
 from win32gui import BringWindowToTop
+
 
 # GetSystemMetrics, see https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsystemmetrics
 import tkinter
@@ -56,21 +59,36 @@ def click_and_crop(event, x, y, flags, clone_r):
                 cv2.rectangle(image_r, refPt, endPt, (0, 255, 0), 2)
                 #cv2.imshow("image", image_r)
 
+                # make sure ref < end (could have clicked and drag from lower right of screen)
+                #pdb.set_point()
+                if endPt[0] < refPt[0]:
+                        tmp = endPt[0]; endPt[0] = refPt[0]; refPt[0] = tmp
+
+                if endPt[1] < refPt[1]:
+                        tmp = endPt[1]; endPt[1] = refPt[1]; refPt[1] = tmp
+
                 # display the selected roi in the ROI window
                 # crop the original image
+                if image is None:
+                        return
+                
                 nr, nc, n3 = image.shape
                 nrr, ncr, n3r = image_r.shape
                 refx = int( float(nc)*float(refPt[0])/float(ncr) )
                 refy = int( float(nr)*float(refPt[1])/float(nrr) )
                 endx = int( float(nc)*float(endPt[0])/float(ncr) )
                 endy = int( float(nr)*float(endPt[1])/float(nrr) )
-                roi = image[refy:endy, refx:endx]
 
-                roi_display = ResizeToScreen(roi)
-                        
-                cv2.imshow("ROI", roi_display)
-                #hWndROI = cv2.cvGetWindowHandle("ROI")
-                #BringWindowToTop(hWndROI)
+                if not (refy == endy or refx == endx):
+                        roi = image[refy:endy, refx:endx]
+                        roi_display = ResizeToScreen(roi)
+
+                        if np.all(np.array(roi_display.shape)>0):
+                                cv2.imshow("ROI", roi_display)
+
+                # else:
+                #       do nothing
+
 
 def ResizeToScreen(image):
         # screen resolution
@@ -99,12 +117,18 @@ def ResizeToScreen(image):
 
         return image_r
 
-def  LoadImage(source_pn, source_fn):
+def  LoadImage(source_fn):
         # load the image, clone it, and setup the mouse callback function
+        # source_fn includes path
+        
         #image = cv2.imread(args["image"])
-        image = cv2.imread(os.path.join(source_pn, source_fn))
+        image = cv2.imread(source_fn)
 
-        image_r = ResizeToScreen(image)
+        if not image is None:
+                image_r = ResizeToScreen(image)
+        else:
+                print('image is None: ', source_fn)
+                image_r = None
         
         return image, image_r
 
@@ -122,7 +146,7 @@ args = vars(ap.parse_args()) # args is a dict
 # root = tkinter.Tk()
 # root.withdraw()
 
-# if sourc path is not specified, use dialog box
+# if source path is not specified, use dialog box
 if args['sourcepath'] is None:
         root = tkinter.Tk()
         root.withdraw()
@@ -136,9 +160,25 @@ else:
         
         pass
 
-listIm_fn = [f for f in os.listdir(source_pn) if os.path.isfile(os.path.join(source_pn, f)) and os.path.splitext(f)[1].lower() == '.jpg']
-listImBack_fn = list() # for returning to previous images
+# if savepath not defined, default is subdir of source path
+# create savepath if it doesn't exist
+if not args['savepath'] is None:
+        save_pn = args['savepath']
+else:
+        save_pn = source_pn + os.path.sep + 'select'
+        #save_pn = "C:\\Users\\dsmar\\OneDrive\\Documents\\Jenna Stuff\\bat mitzvah\\montage" # default for Jenna's montage
 
+print('saving sorted images to: ', save_pn)
+if not os.path.isdir(save_pn):
+        print('creating new path: ', save_pn)
+        os.makedirs(save_pn)
+
+
+# list of jpg files in source path
+listIm_fn = glob.glob(os.path.join(source_pn, '*.jpg'))
+i_Im_current = 0 # points to current image
+print('found %d jpg files'%len(listIm_fn))
+# 
 if not source_fn is None:
         if not source_fn in listIm_fn:
                 sys.exit('error: ' + source_fn + ' not in ' + source_pn)
@@ -146,7 +186,7 @@ if not source_fn is None:
         pass
 
 else:
-        source_fn = listIm_fn[0]
+        source_fn = listIm_fn[i_Im_current]
 
         pass
 
@@ -158,28 +198,42 @@ cv2.namedWindow("image",cv2.WINDOW_AUTOSIZE)
 # WINDOW_NORMAL scales
 # WINDOW_AUTOSIZE (default) displays in original image resolution, even if bigger than screen
 
-image, image_r = LoadImage(source_pn, source_fn)
+image, image_r = LoadImage(source_fn)
 clone_r = image_r.copy()
 cv2.setMouseCallback("image", click_and_crop, clone_r)
 cv2.setWindowTitle("image",source_fn)
 
 # keep looping until the 'q' key is pressed
 while True:
-	# display the image (might have been modified in the callback) and wait for a keypress
-	cv2.imshow("image", image_r)
-	key = cv2.waitKey(1) & 0xFF # wait 1ms and process events
- 
-	# # if the 'r' key is pressed, reset the cropping region
-	# if key == ord("r"):
-	# 	image_r = clone_r.copy()
+        # the image (might have been modified in the callback) and wait for a keypress
+        if (not image_r is None) and np.all(np.array(image_r.shape)>0):
+                cv2.imshow("image", image_r)
 
-	# if the 'r' key is pressed, rotate the image
-	if key == ord("r"):
+        # else:
+        #         # reload
+        #         image, image_r = LoadImage(source_fn)
+        #         clone_r = image_r.copy()
+        #         cv2.setMouseCallback("image", click_and_crop, clone_r)
+        #         #BringWindowToTop(hWndImage)
+        #         cv2.setWindowTitle("image",source_fn)
+
+        #         if np.all(np.array(image_r.shape)>0):
+        #                 cv2.imshow("image", image_r)
+
+        key = cv2.waitKey(1) & 0xFF # wait 1ms and process events
+        
+        # # if the 'r' key is pressed, reset the cropping region
+        # if key == ord("r"):
+        # 	image_r = clone_r.copy()
+
+        # if the 'r' key is pressed, rotate the image
+        if key == ord("r"):
                 
                 
                 nr, nc, n3 = image.shape
-                # M = cv2.getRotationMatrix2D((nr/2,nc/2),90,1)
-                # image = cv2.warpAffine(image, M, (nr, nc)) # , , size of destination image
+                M = cv2.getRotationMatrix2D((nr/2,nc/2),90,1)
+                # , , size of destination image
+                image = cv2.warpAffine(image, M, (nr, nc)) 
                 image = np.rot90(image)
                 image_r = ResizeToScreen(image)
                 
@@ -197,87 +251,109 @@ while True:
                 # bring image window to top
                 #BringWindowToTop(hWndImage)
                 
-	# if the 'c' key is pressed, crop
-	elif key == ord("c"):
-                # if there are two reference points, then crop the region of interest
-                # from teh image and display it
-                if refPt and endPt:
-                        # crop the original image
-                        nr, nc, n3 = image.shape
-                        nrr, ncr, n3r = image_r.shape
-                        refx = int( float(nc)*float(refPt[0])/float(ncr) )
-                        refy = int( float(nr)*float(refPt[1])/float(nrr) )
-                        endx = int( float(nc)*float(endPt[0])/float(ncr) )
-                        endy = int( float(nr)*float(endPt[1])/float(nrr) )
-                        roi = image[refy:endy, refx:endx]
 
-                        roi_display = ResizeToScreen(roi)
+        # quit
+        elif key == ord("q"):
+                break
+
+        elif key == ord("s"):
+                # save current roi, which might be whole image, or cropped
+                
+                _, save_fn = os.path.split(source_fn) # split path, filename
+                save_bn, save_ext = os.path.splitext(save_fn) #
+                save_fn = save_bn + '_crop' + save_ext
+                if os.path.exists(os.path.join(save_pn, save_fn)):
+                        ii = 1
+                        save_fn = save_bn + '_crop_%d'%ii + save_ext
+                        while os.path.exists(os.path.join(save_pn, save_fn)):
+                                ii+=1
+                                save_fn = save_bn + '_crop_%d'%ii + save_ext
+                                
+                print('writing current roi ', os.path.join(save_pn, save_fn))
+                cv2.imwrite(os.path.join(save_pn, save_fn), roi)
+
+        elif key == ord("n"):
+                # # find current position in the list
+                # i_current = listIm_fn.index(source_fn)
+                # listIm_fn.remove(source_fn)
+
+                # advance index, wrap around if necessary
+                i_Im_current += 1
+                if i_Im_current == len(listIm_fn):
+                        i_Im_current = 0
+
+                source_fn = listIm_fn[i_Im_current]
                         
-                        cv2.imshow("ROI", roi_display)
-                        #hWndROI = cv2.cvGetWindowHandle("ROI")
-                        #BringWindowToTop(hWndROI)
+                #listImBack_fn.append(source_fn)
+
+                # if i_current > len(listIm_fn)-1:
+                #         # back to beginning
+                #         source_fn = listIm_fn[0]
+                # else:
+                #         source_fn = listIm_fn[i_current]
+
+                image, image_r = LoadImage(source_fn)
+                if not image is None:
+                        clone_r = image_r.copy()
+                        cv2.setMouseCallback("image", click_and_crop, clone_r)
+                        #BringWindowToTop(hWndImage)
+                        cv2.setWindowTitle("image",source_fn)
+
+                        # set roi = whole image to start with
+                        roi = image.copy()
+
+                pass
+
+        elif key == ord("l"):
+                # reload current image
+                image, image_r = LoadImage(source_fn)
+
+                if not image is None:
+                        clone_r = image_r.copy()
+                        cv2.setMouseCallback("image", click_and_crop, clone_r)
+                        #BringWindowToTop(hWndImage)
+                        cv2.setWindowTitle("image",source_fn)
+
+                        # set roi = whole image to start with
+                        roi = image.copy()
+                
+        elif key == ord("b"):
+                # return to previous image
+
+                # # current source_fn is in listIm_fn
+                # if len(listImBack_fn) == 0:
+                #         continue
+                
+                # source_fn = listImBack_fn[-1]
+                # listImBack_fn.remove(source_fn)
+                # listIm_fn.insert(i_current,source_fn)
+
+                # decrment index, wrap around if necessary
+                i_Im_current -= 1
+                if i_Im_current < 0:
+                        i_Im_current = len(listIm_fn)-1
+
+                source_fn = listIm_fn[i_Im_current]
+        
+                image, image_r = LoadImage(source_fn)
+                if not image is None:
+                        clone_r = image_r.copy()
+                        cv2.setMouseCallback("image", click_and_crop, clone_r)
+                        #BringWindowToTop(hWndImage)
+                        cv2.setWindowTitle("image",source_fn)
+
+                        # set roi = whole image to start with
+                        roi = image.copy()
 
                         pass
                 pass
-
-        # quit
-	elif key == ord("q"):
-                break
-
-	elif key == ord("s"):
-                save_bn, save_ext = os.path.splitext(source_fn)
-                save_fn = save_bn + '_crop' + save_ext
-                save_pn = source_pn + os.path.sep + 'cropped'
-                if not os.path.isdir(save_pn):
-                        os.makedirs(save_pn)
-
-                print('writing ', save_pn + os.path.sep + save_fn)
-                if roi is None:
-                        cv2.imwrite(save_pn + os.path.sep + save_fn, image)
-                else:
-                        cv2.imwrite(save_pn + os.path.sep + save_fn, roi)
-
-	elif key == ord("n"):
-                # find current position in the list
-                i_current = listIm_fn.index(source_fn)
-                listIm_fn.remove(source_fn)
-                listImBack_fn.append(source_fn)
-
-                if i_current > len(listIm_fn)+1:
-                        source_fn = listIm_fn[0]
-                else:
-                        source_fn = listIm_fn[i_current]
-                        
-                image, image_r = LoadImage(source_pn, source_fn)
-                clone_r = image_r.copy()
-                cv2.setMouseCallback("image", click_and_crop, clone_r)
-                #BringWindowToTop(hWndImage)
-                cv2.setWindowTitle("image",source_fn)
-
-                # set roi = None because new image
-                roi = None
+        
+        elif key == ord("p"):
+                # just print the filename of the current image
+                print(source_fn)
 
                 pass
-
-	elif key == ord("b"):
-                # return to previous image
-                # current source_fn is in listIm_fn
-                if len(listImBack_fn) == 0:
-                        continue
-                
-                source_fn = listImBack_fn[-1]
-                listImBack_fn.remove(source_fn)
-                listIm_fn.insert(i_current,source_fn)
-
-                image, image_r = LoadImage(source_pn, source_fn)
-                clone_r = image_r.copy()
-                cv2.setMouseCallback("image", click_and_crop, clone_r)
-                #BringWindowToTop(hWndImage)
-                cv2.setWindowTitle("image",source_fn)
-
-                # set roi = None because new image
-                roi = None
-                
+                        
                 
 # close all open windows
 cv2.destroyAllWindows()

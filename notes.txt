@@ -8,3 +8,15 @@ emacs starts but working dir is emacs/bin. Need to figure out how to make workin
 5. M-x shell
 command line inherits path from the Anaconda shell, so python, etc works
 If you open emacs directly, not through from the anaconda shell, the command line does not have python in the path.
+
+example running:
+> python test_script.py --sourcepath "C:\Users\dsmar\Pictures\2008-08 (Aug)" --savepath "C:\Users\dsmar\OneDrive\Documents\Jenna Stuff\bat mitzvah\montage"
+
+keyboard commands:
+r = rotate
+c = crop
+q = quit
+s = save
+n = next
+l = reload current image
+b = previous image
